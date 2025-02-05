@@ -1,44 +1,37 @@
 using Boilerplate.Infrastructure;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add infrastructure services (Ensure this method exists in Boilerplate.Infrastructure)
+// Add Infrastructure services
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// Add Authentication (JWT)
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var key = builder.Configuration["JwtSettings:Key"];
-        if (string.IsNullOrEmpty(key))
-        {
-            throw new ArgumentNullException("JwtSettings:Key", "JWT Key is missing from configuration.");
-        }
+// Configure Identity with Cookie Authentication
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/api/auth/login";
+    options.LogoutPath = "/api/auth/logout";
+    options.AccessDeniedPath = "/api/auth/access-denied";
+    options.ExpireTimeSpan = TimeSpan.FromHours(2);
+    options.SlidingExpiration = true;
+});
 
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
-            ValidateIssuer = false,   // Change to true if validating issuer
-            ValidateAudience = false, // Change to true if validating audience
-            RequireExpirationTime = true,
-            ValidateLifetime = true
-        };
-    });
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie();
 
-builder.Services.AddAuthorization();
+// Add Authorization Policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAuthenticatedUser", policy => policy.RequireAuthenticatedUser());
+});
+
 builder.Services.AddControllers();
-
-// Enable Swagger (API Documentation)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Enable Swagger in development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -46,11 +39,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRouting();
 
-// Apply Authentication and Authorization Middleware
+// Ensure middleware order is correct
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
 app.Run();
